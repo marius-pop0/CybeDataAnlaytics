@@ -5,6 +5,7 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 from imblearn.over_sampling import SMOTE
+import re
 
 #FORMAT: txid,bookingdate,issuercountrycode,txvariantcode,bin,amount,currencycode,shoppercountrycode,shopperinteraction,simple_journal,cardverificationcodesupplied,cvcresponsecode,creationdate,accountcode,mail_id,ip_id,card_id
 
@@ -24,9 +25,12 @@ def statistics(df):
 def plots(df):
     df['simple_journal'], labels = pd.factorize(df.simple_journal)
 
+
+
     stats_df = df[['cvcresponsecode', 'simple_journal', 'amount']]
     stats_df = stats_df.groupby(['cvcresponsecode', 'simple_journal'], as_index=False)[
         'amount'].mean()  # ['amount'].agg('sum')
+
     print(stats_df)
     pivot = stats_df.pivot(index='cvcresponsecode', columns='simple_journal', values='amount')
     print(labels)
@@ -37,6 +41,8 @@ def plots(df):
     stats_df3 = stats_df2.loc[(stats_df2['cvcresponsecode'] == 0) & (stats_df2['simple_journal'] == 0)]
     stats_df22.hist(column='amount', range=(df['amount'].min(), df['amount'].max()))
     stats_df3.hist(column='amount', range=(df['amount'].min(), df['amount'].max()))
+
+
 
     plt.show()
 
@@ -50,16 +56,17 @@ def smote(df):
     df = pd.get_dummies(df, columns=['issuercountrycode', 'txvariantcode', 'currencycode', 'shoppercountrycode',
                                      'shopperinteraction', 'accountcode', 'cardverificationcodesupplied'])
 
-    X = df.drop(['simple_journal', 'bookingdate', 'mail_id', 'ip_id', 'card_id', 'creationdate'], axis=1).values
+
+    X = df.drop(['simple_journal', 'bookingdate', 'mail_id', 'ip_id', 'card_id'], axis=1).values
     y = df['simple_journal'].values
     print(np.shape(X), np.shape(y))
 
 
     # SMOTE Data
-    # sm = SMOTE(random_state=15, kind='svm')
-    # X_resampled, y_resampled = sm.fit_sample(X, y)
+    sm = SMOTE(random_state=15)
+    X_resampled, y_resampled = sm.fit_sample(X, y)
     # print(sorted(Counter(y_resampled).items()))
-    # print(X_resampled)
+    print(X_resampled)
     # pd.to_csv(df2)
 
 
@@ -67,11 +74,13 @@ def main():
     df = pd.read_csv('data_for_student_case.csv', index_col=0)  # dataframe
     df['cvcresponsecode'].apply(lambda x: float(x))
     df['amount'].apply(lambda x: float(x))
+    # convert date to unix time
+    df['creationdate'] = pd.DatetimeIndex(df['creationdate']).astype(np.int64) / 1000000000
     df = df[df['shoppercountrycode'] != 'GB']
-    # df = df[df['simple_journal'] != 'Refused']
-    # plots(df)
-    # smote(df)
-    statistics(df)
+    df = df[df['simple_journal'] != 'Refused']
+    #plots(df)
+    smote(df)
+    #statistics(df)
 
 
 
