@@ -4,13 +4,15 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
+import datetime
 from imblearn.over_sampling import SMOTE
 import re
+from currency_converter import CurrencyConverter
 
 #FORMAT: txid,bookingdate,issuercountrycode,txvariantcode,bin,amount,currencycode,shoppercountrycode,shopperinteraction,simple_journal,cardverificationcodesupplied,cvcresponsecode,creationdate,accountcode,mail_id,ip_id,card_id
 
 def statistics(df):
-    df1 = df.groupby(['shoppercountrycode', 'currencycode', 'simple_journal']).size().reset_index(name='freq').sort_values(by=['freq'], ascending=False).head()
+    df1 = df.groupby(['currencycode']).size().reset_index(name='freq').sort_values(by=['freq'], ascending=False)
     df2 = df[(df['shoppercountrycode'] == 'AU') & (df['currencycode'] == 'AUD')].groupby(['txvariantcode', 'simple_journal']).size().reset_index(name='freq').sort_values(by=['txvariantcode', 'simple_journal', 'freq'], ascending=False)
     df3 = df[df['simple_journal'] == 'Chargeback'].groupby(['shoppercountrycode', 'currencycode']).size().reset_index(name='freq').sort_values(by=['freq'], ascending=False)
     df4 = df[(df['simple_journal'] == 'Chargeback') & (df['shoppercountrycode']=='AU')].groupby(['card_id', ]).size().reset_index(name='freq').sort_values(by=['freq'], ascending=False).head(10)
@@ -19,8 +21,26 @@ def statistics(df):
 
 
     # print(df1)
-    print(df4)
-    print(df6)
+    print(df1)
+    # print(df6)
+
+def data_manipulation(df):
+    # df['AUD_currency'] = df[['currencycode', 'amount']].apply(lambda x: CurrencyConverter.convert_currency_from_AUD(x), axis=1)
+
+    df['date'] = pd.to_datetime(df['creationdate'])
+    df['diff_time'] = df.sort_values(['card_id', 'creationdate']).groupby('card_id')['date'].diff()
+    print(df.sort_values(['card_id', 'date']).head(20))
+    time = pd.DatetimeIndex(df['diff_time'])
+    df['diff_time_min'] = time.hour * 60 + time.minute + 1#df['diff_time'].str.split(':').apply(lambda x: int(x[0]) * 60 + int(x[1]))
+    df['diff_time_min'] = df['diff_time_min'].fillna(0)
+    # df.sort_values(['card_id', 'date']).head(20)
+    df2 = df[df['simple_journal'] == 'Chargeback']
+    df3 = df[df['simple_journal'] == 'Settled']
+    plt.scatter(df2['amount'], df2['diff_time_min'], edgecolors='b')
+    plt.scatter(df3['amount'], df3['diff_time_min'], edgecolors='r')
+
+    plt.show()
+
 
 def plots(df):
     df['simple_journal'], labels = pd.factorize(df.simple_journal)
@@ -60,15 +80,15 @@ def smote(df):
     df = pd.get_dummies(df, columns=['issuercountrycode', 'txvariantcode', 'currencycode', 'shoppercountrycode',
                                      'shopperinteraction', 'accountcode', 'cardverificationcodesupplied'])
 
-
-    X = df.drop(['simple_journal', 'bookingdate', 'mail_id', 'ip_id', 'card_id'], axis=1).values
+    df = df.drop(['simple_journal', 'bookingdate', 'mail_id', 'ip_id', 'card_id'], axis=1)
+    X = df.values
     y = df['simple_journal'].values
     print(np.shape(X), np.shape(y))
 
 
     # SMOTE Data
     sm = SMOTE(random_state=15)
-    X_resampled, y_resampled = sm.fit_sample(X, y)
+    X_resampled, y_resampled =  sm.fit_sample(X, y)
     # print(sorted(Counter(y_resampled).items()))
     print(X_resampled)
     # pd.to_csv(df2)
@@ -79,12 +99,15 @@ def main():
     df['cvcresponsecode'].apply(lambda x: float(x))
     df['amount'].apply(lambda x: float(x))
     # convert date to unix time
-    df['creationdate'] = pd.DatetimeIndex(df['creationdate']).astype(np.int64) / 1000000000
-    df = df[df['shoppercountrycode'] != 'GB']
+    df['creationdate_unix'] = pd.DatetimeIndex(df['creationdate']).astype(np.int64) / 1000000000
+    # df = df[df['shoppercountrycode'] != 'GB']
     df = df[df['simple_journal'] != 'Refused']
-    plots(df)
-    #smote(df)
-    #statistics(df)
+    # plots(df)
+    # smote(df)
+    # statistics(df)
+    # print(df.columns.values)
+
+    data_manipulation(df)
 
 
 
