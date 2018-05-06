@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
-import datetime
 from imblearn.over_sampling import SMOTE
 import re
 from currency_converter import CurrencyConverter
@@ -12,7 +11,7 @@ from currency_converter import CurrencyConverter
 #FORMAT: txid,bookingdate,issuercountrycode,txvariantcode,bin,amount,currencycode,shoppercountrycode,shopperinteraction,simple_journal,cardverificationcodesupplied,cvcresponsecode,creationdate,accountcode,mail_id,ip_id,card_id
 
 def statistics(df):
-    df1 = df.groupby(['currencycode']).size().reset_index(name='freq').sort_values(by=['freq'], ascending=False)
+    df1 = df.groupby(['shoppercountrycode', 'currencycode', 'simple_journal']).size().reset_index(name='freq').sort_values(by=['freq'], ascending=False).head()
     df2 = df[(df['shoppercountrycode'] == 'AU') & (df['currencycode'] == 'AUD')].groupby(['txvariantcode', 'simple_journal']).size().reset_index(name='freq').sort_values(by=['txvariantcode', 'simple_journal', 'freq'], ascending=False)
     df3 = df[df['simple_journal'] == 'Chargeback'].groupby(['shoppercountrycode', 'currencycode']).size().reset_index(name='freq').sort_values(by=['freq'], ascending=False)
     df4 = df[(df['simple_journal'] == 'Chargeback') & (df['shoppercountrycode']=='AU')].groupby(['card_id', ]).size().reset_index(name='freq').sort_values(by=['freq'], ascending=False).head(10)
@@ -80,19 +79,28 @@ def smote(df):
     df = pd.get_dummies(df, columns=['issuercountrycode', 'txvariantcode', 'currencycode', 'shoppercountrycode',
                                      'shopperinteraction', 'accountcode', 'cardverificationcodesupplied'])
 
+    y = df['simple_journal'].values
     df = df.drop(['simple_journal', 'bookingdate', 'mail_id', 'ip_id', 'card_id'], axis=1)
     X = df.values
-    y = df['simple_journal'].values
+
     print(np.shape(X), np.shape(y))
 
 
     # SMOTE Data
     sm = SMOTE(random_state=15)
-    X_resampled, y_resampled =  sm.fit_sample(X, y)
-    # print(sorted(Counter(y_resampled).items()))
-    print(X_resampled)
-    # pd.to_csv(df2)
+    X_resampled, y_resampled = sm.fit_sample(X, y)
 
+    df2 = pd.DataFrame(X_resampled,columns=df.columns.values)
+    df3 = pd.DataFrame(y_resampled,columns=['simple_journal'])
+    df2 = df2.append(df3)
+
+    #write to csv file (takes a long time)
+    #print("Writing new Dataset!")
+    #df2.to_csv('data_for_student_case_SMOTE2.csv')
+    #print("Writing Dataset Finished!")
+
+    #check the number of data points for each lable
+    print(df2.groupby(['simple_journal']).size())
 
 def main():
     df = pd.read_csv('data_for_student_case.csv', index_col=0)  # dataframe
