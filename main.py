@@ -25,22 +25,26 @@ def statistics(df):
 def plots(df):
     df['simple_journal'], labels = pd.factorize(df.simple_journal)
 
-
-
-    stats_df = df[['cvcresponsecode', 'simple_journal', 'amount']]
-    stats_df = stats_df.groupby(['cvcresponsecode', 'simple_journal'], as_index=False)[
-        'amount'].mean()  # ['amount'].agg('sum')
-
-    print(stats_df)
-    pivot = stats_df.pivot(index='cvcresponsecode', columns='simple_journal', values='amount')
-    print(labels)
+    stats_df = df[['creationdate','amount','ip_id','card_id']]
+    ##change to  any intersting card number
+    stats_df = stats_df[stats_df['card_id'] == 'card182921'].groupby(['creationdate', 'ip_id'], as_index=False)['amount'].mean()
+    pivot = stats_df.pivot(index='ip_id', columns='creationdate', values='amount')
     sns.heatmap(pivot)
 
-    stats_df2 = df[['cvcresponsecode', 'simple_journal', 'amount']]
-    stats_df22 = stats_df2.loc[(stats_df2['cvcresponsecode'] == 0) & (stats_df2['simple_journal'] == 2)]
-    stats_df3 = stats_df2.loc[(stats_df2['cvcresponsecode'] == 0) & (stats_df2['simple_journal'] == 0)]
-    stats_df22.hist(column='amount', range=(df['amount'].min(), df['amount'].max()))
-    stats_df3.hist(column='amount', range=(df['amount'].min(), df['amount'].max()))
+    # stats_df = df[['cvcresponsecode', 'simple_journal', 'amount']]
+    # stats_df = stats_df.groupby(['cvcresponsecode', 'simple_journal'], as_index=False)[
+    #     'amount'].mean()  # ['amount'].agg('sum')
+    #
+    # print(stats_df)
+    # pivot = stats_df.pivot(index='cvcresponsecode', columns='simple_journal', values='amount')
+    # print(labels)
+    # sns.heatmap(pivot)
+    #
+    # stats_df2 = df[['cvcresponsecode', 'simple_journal', 'amount']]
+    # stats_df22 = stats_df2.loc[(stats_df2['cvcresponsecode'] == 0) & (stats_df2['simple_journal'] == 2)]
+    # stats_df3 = stats_df2.loc[(stats_df2['cvcresponsecode'] == 0) & (stats_df2['simple_journal'] == 0)]
+    # stats_df22.hist(column='amount', range=(df['amount'].min(), df['amount'].max()))
+    # stats_df3.hist(column='amount', range=(df['amount'].min(), df['amount'].max()))
 
 
 
@@ -78,8 +82,8 @@ def main():
     df['creationdate'] = pd.DatetimeIndex(df['creationdate']).astype(np.int64) / 1000000000
     df = df[df['shoppercountrycode'] != 'GB']
     df = df[df['simple_journal'] != 'Refused']
-    #plots(df)
-    smote(df)
+    plots(df)
+    #smote(df)
     #statistics(df)
 
 
