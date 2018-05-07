@@ -20,7 +20,7 @@ def statistics(df):
     df1 = df.groupby(['shoppercountrycode', 'currencycode', 'simple_journal']).size().reset_index(name='freq').sort_values(by=['freq'], ascending=False).head()
     df2 = df[(df['shoppercountrycode'] == 'AU') & (df['currencycode'] == 'AUD')].groupby(['txvariantcode', 'simple_journal']).size().reset_index(name='freq').sort_values(by=['txvariantcode', 'simple_journal', 'freq'], ascending=False)
     df3 = df[df['simple_journal'] == 'chargeback'].groupby(['shoppercountrycode', 'currencycode']).size().reset_index(name='freq').sort_values(by=['freq'], ascending=False)
-    df4 = df[(df['simple_journal'] == 'chargeback') & (df['shoppercountrycode']=='au')].groupby(['card_id', ]).size().reset_index(name='freq').sort_values(by=['freq'], ascending=False).head(10)
+    df4 = df[(df['simple_journal'] == 'chargeback') & (df['shoppercountrycode']=='AU')].groupby(['card_id']).size().reset_index(name='freq').sort_values(by=['freq'], ascending=False).head(10)
     df5 = df[df['simple_journal'] == 'settled'].groupby(['card_id']).size().reset_index(name='freq').sort_values(by=['freq'], ascending=False).head(20)
     df6 = df[df['card_id'] == 'card182921'].groupby(['simple_journal', 'amount', 'creationdate', 'ip_id', 'currencycode', 'shopperinteraction', 'shoppercountrycode']).size().reset_index(name='freq').sort_values(by=['creationdate'])#.head(10)
 
@@ -30,24 +30,46 @@ def statistics(df):
     # print(df6)
 
 def plot_time_diff(df):
+    df = df[(df['shoppercountrycode'] == 'AU') & (df['currencycode'] == 'AUD')]
+
     # df['AUD_currency'] = df[['currencycode', 'amount']].apply(lambda x: currencyconverter.convert_currency_from_aud(x), axis=1)
     df['date'] = pd.to_datetime(df['creationdate'])
-    df['diff_time'] = df.sort_values(['card_id', 'creationdate']).groupby('card_id')['date'].diff()
+    df['diff_time'] = df.sort_values(['creationdate']).groupby(['card_id', 'date'])['date'].diff() #TODO: check!
     print(df.sort_values(['card_id', 'date']).head(20))
     time = pd.DatetimeIndex(df['diff_time'])
     df['diff_time_min'] = time.hour * 60 + time.minute + 1 # df['diff_time'].str.split(':').apply(lambda x: int(x[0]) * 60 + int(x[1]))
     df['diff_time_min'] = df['diff_time_min'].fillna(0)
     # df.sort_values(['card_id', 'date']).head(20)
 
-    df1 = df[(df['shoppercountrycode'] == 'AU') & (df['currencycode'] == 'AUD')]
-    print(df1.head(10))
-    df2 = df1[df1['simple_journal'] == 'Chargeback']
-    df3 = df1[df1['simple_journal'] == 'Settled']
-    s = plt.scatter(df3['amount'], df3['diff_time_min'], s=2)
-    f = plt.scatter(df2['amount'], df2['diff_time_min'], s=2)
+    df2 = df[df['simple_journal'] == 'Chargeback']
+    df3 = df[df['simple_journal'] == 'Settled']
+    s = plt.scatter(df3['amount'], df3['diff_time_min'], s=4)
+    f = plt.scatter(df2['amount'], df2['diff_time_min'], s=4)
     plt.legend((f, s), ('Fraud', 'Legitimate'))
-    plt.xlabel('amount')
+    plt.xlabel('transaction amount')
     plt.ylabel('time delta minutes')
+
+    plt.show()
+
+def plot_daily_freq(df):
+    df = df[(df['shoppercountrycode'] == 'AU') & (df['currencycode'] == 'AUD')]
+
+    df['day'] = pd.to_datetime(df['creationdate']).dt.date
+    # print(df.head())
+    df['freq'] = df.sort_values(['creationdate']).groupby(['card_id', 'day'])['creationdate_unix'].rank(
+        method='first').astype(int)
+    df['freq'] = df['freq'] - 1
+
+    df_uu = df[df['freq']>6]
+    print(df_uu.head())
+
+    df3 = df[df['simple_journal'] == 'Settled']
+    df2 = df[df['simple_journal'] == 'Chargeback']
+    s = plt.scatter(df3['amount'], df3['freq'], s=4)
+    f = plt.scatter(df2['amount'], df2['freq'], s=4)
+    plt.legend((f, s), ('Fraud', 'Legitimate'))
+    plt.xlabel('transaction amount')
+    plt.ylabel('daily frequency of so far seen transactions')
 
     plt.show()
 
@@ -117,7 +139,8 @@ def main():
     # statistics(df)
     # print(df.columns.values)
 
-    plot_time_diff(df)
+    # plot_time_diff(df)
+    plot_daily_freq(df)
 
 
 
