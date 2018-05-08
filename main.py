@@ -3,17 +3,20 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 from imblearn.over_sampling import SMOTE
+from sklearn.naive_bayes import GaussianNB
+from sklearn.model_selection import train_test_split
+
 
 #format: txid,bookingdate,issuercountrycode,txvariantcode,bin,amount,currencycode,shoppercountrycode,shopperinteraction,simple_journal,cardverificationcodesupplied,cvcresponsecode,creationdate,accountcode,mail_id,ip_id,card_id
 
 def preprocessing(df):
-    df = df[df['simple_journal'] != 'Refused']
+    df.drop(df[df['simple_journal'] == 'Refused'].index, inplace=True)
     # df = df[df['shoppercountrycode'] != 'GB']
-    df['cvcresponsecode'].apply(lambda x: float(x))
-    df['amount'].apply(lambda x: float(x))
-    df['card_id'] = df['card_id'].map(lambda x: x.lstrip('card'))
-    df['ip_id'] = df['ip_id'].map(lambda x: x.lstrip('ip'))
-    df['mail_id'] = df['mail_id'].map(lambda x: x.lstrip('email'))
+    df['cvcresponsecode'] = df['cvcresponsecode'].map(lambda x: float(x))
+    df['amount'] = df['amount'].map(lambda x: float(x))
+    df['card_id'] = df['card_id'].map(lambda x: x[4:])
+    df['ip_id'] = df['ip_id'].map(lambda x: x[2:])
+    df['mail_id'] = df['mail_id'].map(lambda x: x[5:])
     return df
 
 def statistics(df):
@@ -52,7 +55,7 @@ def plot_time_diff(df):
     plt.show()
 
 def plot_daily_freq(df):
-    df = df[(df['shoppercountrycode'] == 'AU') & (df['currencycode'] == 'AUD')]
+    # df = df[(df['shoppercountrycode'] == 'AU') & (df['currencycode'] == 'AUD')]
 
     df['day'] = pd.to_datetime(df['creationdate']).dt.date
     # print(df.head())
@@ -125,9 +128,15 @@ def plots(df):
 
     plt.show()
 
+def classification(X, y):
+    model = GaussianNB()
+    model.fit(X, y)
+    return model
+
 
 def smote(df):
     print(df.isnull().any())
+
     # df['creationdate'] = pd.to_datetime(df['creationdate'], unit='s')
     df = pd.get_dummies(df, columns=['issuercountrycode', 'txvariantcode', 'currencycode', 'shoppercountrycode',
                                      'shopperinteraction', 'accountcode', 'cardverificationcodesupplied'])
@@ -136,16 +145,28 @@ def smote(df):
     df = df.drop(['simple_journal','creationdate','bookingdate', 'mail_id', 'ip_id', 'card_id'], axis=1)
     X = df.values
 
-    print(np.shape(X), np.shape(y))
-
+    length = np.shape(X)[0]#, np.shape(y))
+    train_len = round(length*2/3)
+    X_train = X[:train_len, :]
+    y_train = y[:train_len]
+    X_test = X[train_len:, :]
+    y_test = y[train_len:]
+    # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
+    print('Size of test data: ' + str(np.shape(X_test)))
 
     # SMOTE Data
     sm = SMOTE(random_state=15)
-    X_resampled, y_resampled = sm.fit_sample(X, y)
+    X_resampled, y_resampled = sm.fit_sample(X_train, y_train)
 
-    df2 = pd.DataFrame(X_resampled,columns=df.columns.values)
-    df3 = pd.DataFrame(y_resampled,columns=['simple_journal'])
-    df2 = df2.append(df3)
+    smoted_model = classification(X_resampled, y_resampled)
+    unsmoted_model = classification(X_train, y_train)
+
+    print(smoted_model.score(X_test, y_test))
+    print(unsmoted_model.score(X_test, y_test))
+
+    # df2 = pd.DataFrame(X_resampled,columns=df.columns.values)
+    # df3 = pd.DataFrame(y_resampled,columns=['simple_journal'])
+    # df2 = df2.append(df3)
 
     #write to csv file (takes a long time)
     #print("Writing new Dataset!")
@@ -153,20 +174,23 @@ def smote(df):
     #print("Writing Dataset Finished!")
 
     #check the number of data points for each lable
-    print(df2.groupby(['simple_journal']).size())
+    # print(df2.groupby(['simple_journal']).size())
 
 def main():
     df = pd.read_csv('data_for_student_case.csv', index_col=0)  # dataframe
+    print('A')
     df = preprocessing(df)
+    print('AA')
     # convert date to unix time
     df['creationdate_unix'] = pd.DatetimeIndex(df['creationdate']).astype(np.int64) / 1000000000
+    print('AAA')
     #plots(df)
     smote(df)
-    statistics(df)
+    # statistics(df)
     # print(df.columns.values)
 
     #plot_time_diff(df)
-    plot_daily_freq(df)
+    # plot_daily_freq(df)
     #plot_amount_ave_diff(df)
 
 
