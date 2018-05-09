@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from imblearn.over_sampling import SMOTE
 from sklearn.naive_bayes import GaussianNB
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix as sk_confusion_matrix
 from sklearn.metrics import roc_curve, auc
 from sklearn.preprocessing import label_binarize
@@ -20,6 +21,8 @@ def preprocessing(df):
     df['card_id'] = df['card_id'].map(lambda x: x[4:])
     df['ip_id'] = df['ip_id'].map(lambda x: x[2:])
     df['mail_id'] = df['mail_id'].map(lambda x: x[5:])
+    df.dropna(axis=0, how='any', inplace=True)
+    df = df[~df.isin(['NaN', 'NaT']).any(axis=1)]
     return df
 
 def statistics(df):
@@ -106,7 +109,7 @@ def plot_amount_ave_diff(df):
 
 def plot_cards_per_ip(df):
     df.dropna(inplace=True)
-    df1 = df.groupby(['ip_id','simple_journal'], as_index=False)['card_id'].size().reset_index(name='freq')
+    df1 = df.groupby(['ip_id', 'simple_journal'], as_index=False)['card_id'].size().reset_index(name='freq')
     df1 = df1[df1['ip_id']!= 'NA']
     df1['ip_id'] = df1['ip_id'].map(lambda x: float(x))
     # df1 = df1[df1['freq'] > 1]
@@ -165,6 +168,7 @@ def plots(df):
 
 def classification(X, y):
     model = GaussianNB()
+    # model = LogisticRegression()
     model.fit(X, y)
     return model
 
@@ -197,14 +201,16 @@ def smote(df):
     sm = SMOTE(random_state=15)
     X_resampled, y_resampled = sm.fit_sample(X_train, y_train)
 
+    # print(np.shape(X_resampled)[1]==np.shape(X_train)[1])
+
     smoted_model = classification(X_resampled, y_resampled)
     unsmoted_model = classification(X_train, y_train)
 
     print('smoted:   ' + str(smoted_model.score(X_test, y_test)))
     print('unsmoted: ' + str(unsmoted_model.score(X_test, y_test)))
 
-    smoted_y_test_predictions = smoted_model.predict(X_test)
-    unsmoted_y_test_predictions = unsmoted_model.predict(X_test)
+    smoted_y_test_predictions = smoted_model.predict_proba(X_test)[:, 1]
+    unsmoted_y_test_predictions = unsmoted_model.predict_proba(X_test)[:, 1]
     print(smoted_y_test_predictions)
 
     # Find and plot AUC
@@ -215,7 +221,7 @@ def smote(df):
 
     plt.title('ROC')
     plt.plot(sm_false_positive_rate, sm_true_positive_rate, label=('AUC-smoted' + '= %0.2f' % sm_roc_auc))
-    plt.plot(unsm_false_positive_rate, unsm_true_positive_rate, label=('AUC-smoted' + '= %0.2f' % unsm_roc_auc))
+    plt.plot(unsm_false_positive_rate, unsm_true_positive_rate, label=('AUC-unsmoted' + '= %0.2f' % unsm_roc_auc))
     plt.legend(loc='lower right', prop={'size': 8})
     plt.plot([0, 1], [0, 1], color='lightgrey', linestyle='--')
     plt.xlim([-0.05, 1.0])
