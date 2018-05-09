@@ -101,6 +101,38 @@ def plot_amount_ave_diff(df):
 
     plt.show()
 
+def plot_cards_per_ip(df):
+    df.dropna(inplace=True)
+    df1 = df.groupby(['ip_id','simple_journal'], as_index=False)['card_id'].size().reset_index(name='freq')
+    df1 = df1[df1['ip_id']!= 'NA']
+    df1['ip_id'] = df1['ip_id'].map(lambda x: float(x))
+    # df1 = df1[df1['freq'] > 1]
+    print(df1)
+    df2 = df1[df1['simple_journal'] == 'Chargeback']
+    df3 = df1[df1['simple_journal'] == 'Settled']
+    s = plt.scatter(df3['ip_id'], df3['freq'], s=8)
+    f = plt.scatter(df2['ip_id'], df2['freq'], s=8)
+    plt.legend((f, s), ('Fraud', 'Legitimate'))
+    plt.xlabel('IP ID')
+    plt.ylabel('Frequency of IP used')
+    plt.show()
+
+def plot_cards_per_mail(df):
+    # df.dropna(axis=0, how='any', inplace=True)
+    df1 = df.groupby(['mail_id', 'simple_journal'], as_index=False)['card_id'].size().reset_index(name='freq')
+    print(df1[df1['mail_id']=='NA'].head())
+    df1.dropna(axis=0, how='any', inplace=True)
+    df1= df1[df1['mail_id']!= 'NA']
+    df1['mail_id'] = df1['mail_id'].map(lambda x: float(x))
+    df2 = df1[df1['simple_journal'] == 'Chargeback']
+    df3 = df1[df1['simple_journal'] == 'Settled']
+    print(df3[df3['freq']>1].head())
+    s = plt.scatter(df3['mail_id'], df3['freq'], s=8)
+    f = plt.scatter(df2['mail_id'], df2['freq'], s=8)
+    plt.legend((f, s), ('Fraud', 'Legitimate'))
+    plt.xlabel('E-mail')
+    plt.ylabel('Frequency of e-mail used')
+    plt.show()
 
 def plots(df):
     df['simple_journal'], labels = pd.factorize(df.simple_journal)
@@ -142,7 +174,7 @@ def smote(df):
                                      'shopperinteraction', 'accountcode', 'cardverificationcodesupplied'])
 
     y = df['simple_journal'].values
-    df = df.drop(['simple_journal','creationdate','bookingdate', 'mail_id', 'ip_id', 'card_id'], axis=1)
+    df = df.drop(['simple_journal', 'creationdate', 'bookingdate', 'mail_id', 'ip_id', 'card_id'], axis=1)
     X = df.values
 
     length = np.shape(X)[0]#, np.shape(y))
@@ -161,8 +193,8 @@ def smote(df):
     smoted_model = classification(X_resampled, y_resampled)
     unsmoted_model = classification(X_train, y_train)
 
-    print(smoted_model.score(X_test, y_test))
-    print(unsmoted_model.score(X_test, y_test))
+    print('smoted:   ' + str(smoted_model.score(X_test, y_test)))
+    print('unsmoted: ' + str(unsmoted_model.score(X_test, y_test)))
 
     # df2 = pd.DataFrame(X_resampled,columns=df.columns.values)
     # df3 = pd.DataFrame(y_resampled,columns=['simple_journal'])
@@ -178,21 +210,19 @@ def smote(df):
 
 def main():
     df = pd.read_csv('data_for_student_case.csv', index_col=0)  # dataframe
-    print('A')
     df = preprocessing(df)
-    print('AA')
     # convert date to unix time
-    df['creationdate_unix'] = pd.DatetimeIndex(df['creationdate']).astype(np.int64) / 1000000000
-    print('AAA')
+    # df['creationdate_unix'] = pd.DatetimeIndex(df['creationdate']).astype(np.int64) / 1000000000
     #plots(df)
-    smote(df)
+    # smote(df)
     # statistics(df)
     # print(df.columns.values)
 
     #plot_time_diff(df)
     # plot_daily_freq(df)
     #plot_amount_ave_diff(df)
-
+    # plot_cards_per_mail(df)
+    plot_cards_per_ip(df)
 
 
 main()
