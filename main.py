@@ -5,6 +5,8 @@ import numpy as np
 from imblearn.over_sampling import SMOTE
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import confusion_matrix as sk_confusion_matrix
 from sklearn.metrics import roc_curve, auc
 from sklearn.preprocessing import label_binarize
@@ -13,17 +15,6 @@ from sklearn.model_selection import train_test_split
 
 #format: txid,bookingdate,issuercountrycode,txvariantcode,bin,amount,currencycode,shoppercountrycode,shopperinteraction,simple_journal,cardverificationcodesupplied,cvcresponsecode,creationdate,accountcode,mail_id,ip_id,card_id
 
-def preprocessing(df):
-    df.drop(df[df['simple_journal'] == 'Refused'].index, inplace=True)
-    # df = df[df['shoppercountrycode'] != 'GB']
-    df['cvcresponsecode'] = df['cvcresponsecode'].map(lambda x: float(x))
-    df['amount'] = df['amount'].map(lambda x: float(x))
-    df['card_id'] = df['card_id'].map(lambda x: x[4:])
-    df['ip_id'] = df['ip_id'].map(lambda x: x[2:])
-    df['mail_id'] = df['mail_id'].map(lambda x: x[5:])
-    df.dropna(axis=0, how='any', inplace=True)
-    df = df[~df.isin(['NaN', 'NaT']).any(axis=1)]
-    return df
 
 def statistics(df):
     df1 = df.groupby(['shoppercountrycode', 'currencycode', 'simple_journal']).size().reset_index(name='freq').sort_values(by=['freq'], ascending=False).head()
@@ -33,22 +24,21 @@ def statistics(df):
     df5 = df[df['simple_journal'] == 'Settled'].groupby(['card_id']).size().reset_index(name='freq').sort_values(by=['freq'], ascending=False).head(20)
     df6 = df[df['card_id'] == 'card182921'].groupby(['simple_journal', 'amount', 'creationdate', 'ip_id', 'currencycode', 'shopperinteraction', 'shoppercountrycode']).size().reset_index(name='freq').sort_values(by=['creationdate'])#.head(10)
 
-
     # print(df1)
     print(df1)
     # print(df6)
 
-def plot_time_diff(df):
-    df = df[(df['shoppercountrycode'] == 'AU') & (df['currencycode'] == 'AUD')]
-
-    # df['AUD_currency'] = df[['currencycode', 'amount']].apply(lambda x: currencyconverter.convert_currency_from_aud(x), axis=1)
+def time_diff(df):
     df['date'] = pd.to_datetime(df['creationdate'])
     df['diff_time'] = df.sort_values(['card_id', 'creationdate']).groupby('card_id')['date'].diff()
     print(df.sort_values(['card_id', 'date']).head(20))
     time = pd.DatetimeIndex(df['diff_time'])
     df['diff_time_min'] = time.hour * 60 + time.minute + 1  # df['diff_time'].str.split(':').apply(lambda x: int(x[0]) * 60 + int(x[1]))
     df['diff_time_min'] = df['diff_time_min'].fillna(0)
-    # df.sort_values(['card_id', 'date']).head(20)
+    return df
+
+def plot_time_diff(df):
+    df = df[(df['shoppercountrycode'] == 'AU') & (df['currencycode'] == 'AUD')]
 
     df2 = df[df['simple_journal'] == 'Chargeback']
     df3 = df[df['simple_journal'] == 'Settled']
@@ -166,15 +156,34 @@ def plots(df):
 
     plt.show()
 
+
+def preprocessing(df):
+    df.drop(df[df['simple_journal'] == 'Refused'].index, inplace=True)
+    # df = df[df['shoppercountrycode'] != 'GB']
+    df['cvcresponsecode'] = df['cvcresponsecode'].map(lambda x: float(x))
+    df['amount'] = df['amount'].map(lambda x: float(x))
+    df['card_id'] = df['card_id'].map(lambda x: x[4:])
+    df['ip_id'] = df['ip_id'].map(lambda x: x[2:])
+    df['mail_id'] = df['mail_id'].map(lambda x: x[5:])
+    # df['AUD_currency'] = df[['currencycode', 'amount']].apply(lambda x: currencyconverter.convert_currency_from_aud(x), axis=1)
+    df.dropna(axis=0, how='any', inplace=True)
+    df = df[~df.isin(['NaN', 'NaT']).any(axis=1)]
+    return df
+
 def classification(X, y):
-    model = GaussianNB()
-    # model = LogisticRegression()
+    # model = GaussianNB() # -- good
+    model = MLPClassifier() # -- good?
+    # model = DecisionTreeClassifier() # -- good?
+    # model = LogisticRegression() # -- bad
     model.fit(X, y)
     return model
 
+def black_box(X, y):
+    # df = time_diff(df)
+
 
 def smote(df):
-    print(df.isnull().any())
+    # print(df.isnull().any())
 
     # df['creationdate'] = pd.to_datetime(df['creationdate'], unit='s')
     df = pd.get_dummies(df, columns=['issuercountrycode', 'txvariantcode', 'currencycode', 'shoppercountrycode',
@@ -184,7 +193,7 @@ def smote(df):
     print(y)
     y = label_binarize(y, classes=['Settled', 'Chargeback'])
     y = np.concatenate(y, 0)
-    print(y)
+    # print(y)
     df = df.drop(['simple_journal', 'creationdate', 'bookingdate', 'mail_id', 'ip_id', 'card_id'], axis=1)
     X = df.values
 
@@ -209,13 +218,19 @@ def smote(df):
     print('smoted:   ' + str(smoted_model.score(X_test, y_test)))
     print('unsmoted: ' + str(unsmoted_model.score(X_test, y_test)))
 
-    smoted_y_test_predictions = smoted_model.predict_proba(X_test)[:, 1]
-    unsmoted_y_test_predictions = unsmoted_model.predict_proba(X_test)[:, 1]
+    smoted_y_test_predictions = smoted_model.predict_proba(X_test)
+    unsmoted_y_test_predictions = unsmoted_model.predict_proba(X_test)
+    print(np.shape(unsmoted_y_test_predictions))
     print(smoted_y_test_predictions)
+    print(unsmoted_y_test_predictions)
+    print(np.sum(unsmoted_y_test_predictions, axis=1))
+    smoted_y_test_predictions = smoted_y_test_predictions[:, 1]
+    unsmoted_y_test_predictions = unsmoted_y_test_predictions[:, 1]
 
     # Find and plot AUC
     sm_false_positive_rate, sm_true_positive_rate, sm_thresholds = roc_curve(y_test, smoted_y_test_predictions)
     sm_roc_auc = auc(sm_false_positive_rate, sm_true_positive_rate)
+
     unsm_false_positive_rate, unsm_true_positive_rate, unsm_thresholds = roc_curve(y_test, unsmoted_y_test_predictions)
     unsm_roc_auc = auc(unsm_false_positive_rate, unsm_true_positive_rate)
 
@@ -229,7 +244,6 @@ def smote(df):
     plt.ylabel('True Positive Rate')
     plt.xlabel('False Positive Rate')
     plt.show()
-
 
     # df2 = pd.DataFrame(X_resampled,columns=df.columns.values)
     # df3 = pd.DataFrame(y_resampled,columns=['simple_journal'])
@@ -253,7 +267,7 @@ def main():
     # statistics(df)
     # print(df.columns.values)
 
-    #plot_time_diff(df)
+    # plot_time_diff(df)
     # plot_daily_freq(df)
     #plot_amount_ave_diff(df)
     # plot_cards_per_mail(df)
