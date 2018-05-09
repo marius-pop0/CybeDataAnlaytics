@@ -4,6 +4,9 @@ import pandas as pd
 import numpy as np
 from imblearn.over_sampling import SMOTE
 from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import confusion_matrix as sk_confusion_matrix
+from sklearn.metrics import roc_curve, auc
+from sklearn.preprocessing import label_binarize
 from sklearn.model_selection import train_test_split
 
 
@@ -174,6 +177,10 @@ def smote(df):
                                      'shopperinteraction', 'accountcode', 'cardverificationcodesupplied'])
 
     y = df['simple_journal'].values
+    print(y)
+    y = label_binarize(y, classes=['Settled', 'Chargeback'])
+    y = np.concatenate(y, 0)
+    print(y)
     df = df.drop(['simple_journal', 'creationdate', 'bookingdate', 'mail_id', 'ip_id', 'card_id'], axis=1)
     X = df.values
 
@@ -196,6 +203,28 @@ def smote(df):
     print('smoted:   ' + str(smoted_model.score(X_test, y_test)))
     print('unsmoted: ' + str(unsmoted_model.score(X_test, y_test)))
 
+    smoted_y_test_predictions = smoted_model.predict(X_test)
+    unsmoted_y_test_predictions = unsmoted_model.predict(X_test)
+    print(smoted_y_test_predictions)
+
+    # Find and plot AUC
+    sm_false_positive_rate, sm_true_positive_rate, sm_thresholds = roc_curve(y_test, smoted_y_test_predictions)
+    sm_roc_auc = auc(sm_false_positive_rate, sm_true_positive_rate)
+    unsm_false_positive_rate, unsm_true_positive_rate, unsm_thresholds = roc_curve(y_test, unsmoted_y_test_predictions)
+    unsm_roc_auc = auc(unsm_false_positive_rate, unsm_true_positive_rate)
+
+    plt.title('ROC')
+    plt.plot(sm_false_positive_rate, sm_true_positive_rate, label=('AUC-smoted' + '= %0.2f' % sm_roc_auc))
+    plt.plot(unsm_false_positive_rate, unsm_true_positive_rate, label=('AUC-smoted' + '= %0.2f' % unsm_roc_auc))
+    plt.legend(loc='lower right', prop={'size': 8})
+    plt.plot([0, 1], [0, 1], color='lightgrey', linestyle='--')
+    plt.xlim([-0.05, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.ylabel('True Positive Rate')
+    plt.xlabel('False Positive Rate')
+    plt.show()
+
+
     # df2 = pd.DataFrame(X_resampled,columns=df.columns.values)
     # df3 = pd.DataFrame(y_resampled,columns=['simple_journal'])
     # df2 = df2.append(df3)
@@ -214,7 +243,7 @@ def main():
     # convert date to unix time
     # df['creationdate_unix'] = pd.DatetimeIndex(df['creationdate']).astype(np.int64) / 1000000000
     #plots(df)
-    # smote(df)
+    smote(df)
     # statistics(df)
     # print(df.columns.values)
 
@@ -222,7 +251,7 @@ def main():
     # plot_daily_freq(df)
     #plot_amount_ave_diff(df)
     # plot_cards_per_mail(df)
-    plot_cards_per_ip(df)
+    # plot_cards_per_ip(df)
 
 
 main()
