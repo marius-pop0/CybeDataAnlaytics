@@ -23,8 +23,6 @@ import argparse
 
 #format: txid,bookingdate,issuercountrycode,txvariantcode,bin,amount,currencycode,shoppercountrycode,shopperinteraction,simple_journal,cardverificationcodesupplied,cvcresponsecode,creationdate,accountcode,mail_id,ip_id,card_id
 
-
-
 def preprocessing(df):
     df.drop(df[df['simple_journal'] == 'Refused'].index, inplace=True)
     # df = df[df['shoppercountrycode'] != 'GB']
@@ -33,13 +31,13 @@ def preprocessing(df):
     df['card_id'] = df['card_id'].map(lambda x: x[4:])
     df['ip_id'] = df['ip_id'].map(lambda x: x[2:])
     df['mail_id'] = df['mail_id'].map(lambda x: x[5:])
-    # df['creationdate_unix'] = pd.DatetimeIndex(df['creationdate']).astype(np.int64) / 1000000000
+    # df['creationdate_unix'] = pd.DatetimeIndex(df['creationdate']).astype(np.int64) / 1000000000 #very bad results!!
     # df['AUD_currency'] = df[['currencycode', 'amount']].apply(lambda x: currencyconverter.convert_currency_from_aud(x), axis=1)
     df.dropna(axis=0, how='any', inplace=True)
     df = df[~df.isin(['NaN', 'NaT']).any(axis=1)]
     return df
 
-def classification(X, y, classyType):
+def classification(X_train, y_train, X_test, classyType):
     if classyType == 'NB':
         print('Naive Bayes')
         model = GaussianNB() # -- good
@@ -51,13 +49,23 @@ def classification(X, y, classyType):
         model = DecisionTreeClassifier() # -- good?
     elif classyType == 'RF':
         print('Random Forest')
-
         model = RandomForestClassifier()
     elif classyType == 'LR':
         print('Linear Regression')
         model = LogisticRegression() # -- bad
-    model.fit(X, y)
-    return model
+    model.fit(X_train, y_train)
+    predict_prob = model.predict_proba(X_test)[:, 1]
+    predict_bin = model.predict(X_test)
+    return model, predict_prob, predict_bin
+
+
+def pca(X_train, X_test):
+    pca_model = PCA(n_components=0.99, svd_solver='full')
+    X_train = pca_model.fit_transform(X_train)
+    X_test = pca_model.transform(X_test)
+    print('PCA k={}'.format(np.shape(X_train)[1]))
+    return X_train, X_test
+
 
 def plot_ROC(y_test, smoted_predict_prob, unsmoted_predict_prob, smoted_predict_bin, unsmoted_predict_bin):
     # Find and plot AUC
@@ -68,8 +76,8 @@ def plot_ROC(y_test, smoted_predict_prob, unsmoted_predict_prob, smoted_predict_
     unsm_roc_auc = auc(unsm_false_positive_rate, unsm_true_positive_rate)
 
     # confusion matrix
-    con_matrix = [['TP', 'FP'],
-                  ['FN', 'TN']]
+    con_matrix = [['TN', 'FN'],
+                  ['FP', 'TP']]
     print(con_matrix)
     print('smoted: \n', confusion_matrix(y_test, smoted_predict_bin))
     print('unsmoted: \n', confusion_matrix(y_test, unsmoted_predict_bin))
@@ -118,16 +126,14 @@ def smote(df, ratio, clsType,  toPlot=False):
     # print(np.shape(X_resampled)[1]==np.shape(X_train)[1])
 
     if toPlot:
-        smoted_model = classification(X_resampled, y_resampled, clsType)
-        unsmoted_model = classification(X_train, y_train, clsType)
+        if clsType == 'RF':
+            X_resampled, X_test_sm = pca(X_resampled, X_test)
+            X_train, X_test_unsm = pca(X_train, X_test)
+        smoted_model, smoted_predict_prob, smoted_predict_bin = classification(X_resampled, y_resampled, X_test_sm, clsType)
+        unsmoted_model, unsmoted_predict, unsmoted_predict_bin = classification(X_train, y_train, X_test_unsm, clsType)
 
-        print('smoted:   ' + str(smoted_model.score(X_test, y_test)))
-        print('unsmoted: ' + str(unsmoted_model.score(X_test, y_test)))
-
-        smoted_predict_prob = smoted_model.predict_proba(X_test)[:, 1]
-        smoted_predict_bin = smoted_model.predict(X_test)
-        unsmoted_predict = unsmoted_model.predict_proba(X_test)[:, 1]
-        unsmoted_predict_bin = unsmoted_model.predict(X_test)
+        print('smoted:   ' + str(smoted_model.score(X_test_sm, y_test)))
+        print('unsmoted: ' + str(unsmoted_model.score(X_test_unsm, y_test)))
 
         plot_ROC(y_test, smoted_predict_prob, unsmoted_predict, smoted_predict_bin, unsmoted_predict_bin)
 
