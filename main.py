@@ -15,6 +15,7 @@ from sklearn.preprocessing import label_binarize
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.decomposition import PCA
+from imblearn.combine import SMOTETomek
 
 import plotting as plotting
 
@@ -75,6 +76,9 @@ def plot_ROC(y_test, smoted_predict_prob, unsmoted_predict_prob, smoted_predict_
     unsm_false_positive_rate, unsm_true_positive_rate, unsm_thresholds = roc_curve(y_test, unsmoted_predict_prob)
     unsm_roc_auc = auc(unsm_false_positive_rate, unsm_true_positive_rate)
 
+    print('smoted AUC:   {}'.format(sm_roc_auc))
+    print('unsmoted AUC: {}'.format(unsm_roc_auc))
+
     # confusion matrix
     con_matrix = [['TN', 'FN'],
                   ['FP', 'TP']]
@@ -109,32 +113,31 @@ def smote(df, ratio, clsType,  toPlot=False):
     print('Amount of fraud data: {} and non fraud: {}'.format((y == 1).sum(), (y == 0).sum()))
     X = df.values
 
-    length = np.shape(X)[0]#, np.shape(y))
-    train_len = round(length*ratio)
+    # length = np.shape(X)[0]#, np.shape(y))
+    # train_len = round(length*ratio)
     # X_train = X[:train_len, :]
     # y_train = y[:train_len]
     # X_test = X[train_len:, :]
     # y_test = y[train_len:]
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=22)
-    print('Size of test data: ' + str(np.shape(X_test)))
-    print('# Fraud transactions in test data: {}'.format((y_test == 1).sum()))
-
-    # PCA
-    if clsType == 'RF':
-        X_train, X_test = pca(X_train, X_test)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
+    print('Test data size: ' + str(np.shape(X_test)))
+    print('Test data fraud #{}'.format((y_test == 1).sum()))
 
     # SMOTE Data
-    sm = SMOTE(random_state=15)
+    sm = SMOTETomek()#SMOTE()#
     X_resampled, y_resampled = sm.fit_sample(X_train, y_train)
 
-    # print(np.shape(X_resampled)[1]==np.shape(X_train)[1])
+    print('Train data size: {}'.format(np.shape(X_resampled)))
 
     if toPlot:
-        smoted_model, smoted_predict_prob, smoted_predict_bin = classification(X_resampled, y_resampled, X_test, clsType)
-        unsmoted_model, unsmoted_predict, unsmoted_predict_bin = classification(X_train, y_train, X_test, clsType)
+        if clsType == 'RF':
+            X_resampled, X_test_sm = pca(X_resampled, X_test)
+            X_train, X_test_unsm = pca(X_train, X_test)
+        smoted_model, smoted_predict_prob, smoted_predict_bin = classification(X_resampled, y_resampled, X_test_sm, clsType)
+        unsmoted_model, unsmoted_predict, unsmoted_predict_bin = classification(X_train, y_train, X_test_unsm, clsType)
 
-        print('smoted:   ' + str(smoted_model.score(X_test, y_test)))
-        print('unsmoted: ' + str(unsmoted_model.score(X_test, y_test)))
+        print('smoted:   ' + str(smoted_model.score(X_test_sm, y_test)))
+        print('unsmoted: ' + str(unsmoted_model.score(X_test_unsm, y_test)))
 
         plot_ROC(y_test, smoted_predict_prob, unsmoted_predict, smoted_predict_bin, unsmoted_predict_bin)
 
