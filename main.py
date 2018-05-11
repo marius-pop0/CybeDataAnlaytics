@@ -111,13 +111,17 @@ def smote(df, ratio, clsType,  toPlot=False):
 
     length = np.shape(X)[0]#, np.shape(y))
     train_len = round(length*ratio)
-    X_train = X[:train_len, :]
-    y_train = y[:train_len]
-    X_test = X[train_len:, :]
-    y_test = y[train_len:]
-    # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
+    # X_train = X[:train_len, :]
+    # y_train = y[:train_len]
+    # X_test = X[train_len:, :]
+    # y_test = y[train_len:]
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=22)
     print('Size of test data: ' + str(np.shape(X_test)))
     print('# Fraud transactions in test data: {}'.format((y_test == 1).sum()))
+
+    # PCA
+    if clsType == 'RF':
+        X_train, X_test = pca(X_train, X_test)
 
     # SMOTE Data
     sm = SMOTE(random_state=15)
@@ -126,14 +130,11 @@ def smote(df, ratio, clsType,  toPlot=False):
     # print(np.shape(X_resampled)[1]==np.shape(X_train)[1])
 
     if toPlot:
-        if clsType == 'RF':
-            X_resampled, X_test_sm = pca(X_resampled, X_test)
-            X_train, X_test_unsm = pca(X_train, X_test)
-        smoted_model, smoted_predict_prob, smoted_predict_bin = classification(X_resampled, y_resampled, X_test_sm, clsType)
-        unsmoted_model, unsmoted_predict, unsmoted_predict_bin = classification(X_train, y_train, X_test_unsm, clsType)
+        smoted_model, smoted_predict_prob, smoted_predict_bin = classification(X_resampled, y_resampled, X_test, clsType)
+        unsmoted_model, unsmoted_predict, unsmoted_predict_bin = classification(X_train, y_train, X_test, clsType)
 
-        print('smoted:   ' + str(smoted_model.score(X_test_sm, y_test)))
-        print('unsmoted: ' + str(unsmoted_model.score(X_test_unsm, y_test)))
+        print('smoted:   ' + str(smoted_model.score(X_test, y_test)))
+        print('unsmoted: ' + str(unsmoted_model.score(X_test, y_test)))
 
         plot_ROC(y_test, smoted_predict_prob, unsmoted_predict, smoted_predict_bin, unsmoted_predict_bin)
 
