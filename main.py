@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import argparse
 import pandas as pd
 import numpy as np
+
+from sklearn.metrics import confusion_matrix
 from imblearn.over_sampling import SMOTE
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
@@ -12,6 +14,7 @@ from sklearn.metrics import roc_curve, auc
 from sklearn.preprocessing import label_binarize
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.decomposition import PCA
 
 import plotting as plotting
 
@@ -30,7 +33,7 @@ def preprocessing(df):
     df['card_id'] = df['card_id'].map(lambda x: x[4:])
     df['ip_id'] = df['ip_id'].map(lambda x: x[2:])
     df['mail_id'] = df['mail_id'].map(lambda x: x[5:])
-    df['creationdate_unix'] = pd.DatetimeIndex(df['creationdate']).astype(np.int64) / 1000000000
+    # df['creationdate_unix'] = pd.DatetimeIndex(df['creationdate']).astype(np.int64) / 1000000000
     # df['AUD_currency'] = df[['currencycode', 'amount']].apply(lambda x: currencyconverter.convert_currency_from_aud(x), axis=1)
     df.dropna(axis=0, how='any', inplace=True)
     df = df[~df.isin(['NaN', 'NaT']).any(axis=1)]
@@ -38,28 +41,38 @@ def preprocessing(df):
 
 def classification(X, y, classyType):
     if classyType == 'NB':
+        print('Naive Bayes')
         model = GaussianNB() # -- good
     elif classyType == 'MLP':
+        print('MLP')
         model = MLPClassifier() # -- good?
     elif classyType == 'DT':
+        print('Decision Tree')
         model = DecisionTreeClassifier() # -- good?
     elif classyType == 'RF':
         print('Random Forest')
+
         model = RandomForestClassifier()
     elif classyType == 'LR':
+        print('Linear Regression')
         model = LogisticRegression() # -- bad
     model.fit(X, y)
     return model
 
-def plot_ROC(y_test, smoted_y_test_predictions, unsmoted_y_test_predictions):
+def plot_ROC(y_test, smoted_predict_prob, unsmoted_predict_prob, smoted_predict_bin, unsmoted_predict_bin):
     # Find and plot AUC
-    sm_false_positive_rate, sm_true_positive_rate, sm_thresholds = roc_curve(y_test, smoted_y_test_predictions)
+    sm_false_positive_rate, sm_true_positive_rate, sm_thresholds = roc_curve(y_test, smoted_predict_prob)
     sm_roc_auc = auc(sm_false_positive_rate, sm_true_positive_rate)
 
-    print('Smoted TP: {}, FP: {}'.format(sm_true_positive_rate, sm_false_positive_rate))
-
-    unsm_false_positive_rate, unsm_true_positive_rate, unsm_thresholds = roc_curve(y_test, unsmoted_y_test_predictions)
+    unsm_false_positive_rate, unsm_true_positive_rate, unsm_thresholds = roc_curve(y_test, unsmoted_predict_prob)
     unsm_roc_auc = auc(unsm_false_positive_rate, unsm_true_positive_rate)
+
+    # confusion matrix
+    con_matrix = [['TP', 'FP'],
+                  ['FN', 'TN']]
+    print(con_matrix)
+    print('smoted: \n', confusion_matrix(y_test, smoted_predict_bin))
+    print('unsmoted: \n', confusion_matrix(y_test, unsmoted_predict_bin))
 
     plt.title('ROC')
     plt.plot(sm_false_positive_rate, sm_true_positive_rate, label=('AUC-smoted' + '= %0.2f' % sm_roc_auc))
@@ -85,6 +98,7 @@ def smote(df, ratio, clsType,  toPlot=False):
     y = np.concatenate(y, 0)
     # print(y)
     df = df.drop(['simple_journal', 'creationdate', 'bookingdate', 'mail_id', 'ip_id', 'card_id'], axis=1)
+    print('Amount of fraud data: {} and non fraud: {}'.format((y == 1).sum(), (y == 0).sum()))
     X = df.values
 
     length = np.shape(X)[0]#, np.shape(y))
@@ -95,6 +109,7 @@ def smote(df, ratio, clsType,  toPlot=False):
     y_test = y[train_len:]
     # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
     print('Size of test data: ' + str(np.shape(X_test)))
+    print('# Fraud transactions in test data: {}'.format((y_test == 1).sum()))
 
     # SMOTE Data
     sm = SMOTE(random_state=15)
@@ -109,13 +124,12 @@ def smote(df, ratio, clsType,  toPlot=False):
         print('smoted:   ' + str(smoted_model.score(X_test, y_test)))
         print('unsmoted: ' + str(unsmoted_model.score(X_test, y_test)))
 
-        smoted_y_test_predictions = smoted_model.predict_proba(X_test)
-        unsmoted_y_test_predictions = unsmoted_model.predict_proba(X_test)
-        smoted_y_test_predictions = smoted_y_test_predictions[:, 1]
-        unsmoted_y_test_predictions = unsmoted_y_test_predictions[:, 1]
+        smoted_predict_prob = smoted_model.predict_proba(X_test)[:, 1]
+        smoted_predict_bin = smoted_model.predict(X_test)
+        unsmoted_predict = unsmoted_model.predict_proba(X_test)[:, 1]
+        unsmoted_predict_bin = unsmoted_model.predict(X_test)
 
-
-        plot_ROC(y_test, smoted_y_test_predictions, unsmoted_y_test_predictions)
+        plot_ROC(y_test, smoted_predict_prob, unsmoted_predict, smoted_predict_bin, unsmoted_predict_bin)
 
     return X_resampled, y_resampled, X_test, y_test
 
