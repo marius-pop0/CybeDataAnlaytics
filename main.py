@@ -17,11 +17,12 @@ from sklearn.metrics import roc_curve, auc
 from sklearn.preprocessing import label_binarize
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, SparsePCA
 from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn import svm
 
 import plotting as plotting
+from currency_converter import CurrencyConverter
 
 import argparse
 
@@ -36,16 +37,18 @@ def preprocessing(df, unix, diff):
     df['card_id'] = df['card_id'].map(lambda x: x[4:])
     df['ip_id'] = df['ip_id'].map(lambda x: x[2:])
     df['mail_id'] = df['mail_id'].map(lambda x: x[5:])
+    min_unix = 0
     if unix:
-        df['creationdate_unix'] = pd.DatetimeIndex(df['creationdate']).astype(np.int64) / 1000000000 #very bad results!!
-        df['creationdate_unix'].sub(df['creationdate_unix'].min(), axis=0)
+        df['creationdate_unix'] = pd.DatetimeIndex(df['creationdate']).astype(np.int64) / 1000000000
+        min_unix = df['creationdate_unix'].min()
+        df['creationdate_unix'].sub(min_unix, axis=0)
         df['creationdate_unix'] = df['creationdate_unix'].map(lambda x: math.log(x))
     if diff:
-        df = plotting.time_diff(df)
-    # df['AUD_currency'] = df[['currencycode', 'amount']].apply(lambda x: currencyconverter.convert_currency_from_aud(x), axis=1)
+        df = time_diff(df)
+    df['AUD_currency'] = df[['currencycode', 'amount']].apply(lambda x: CurrencyConverter.convert_currency_from_AUD(x), axis=1)
     df.dropna(axis=0, how='any', inplace=True)
     df = df[~df.isin(['NaN', 'NaT', 'NA']).any(axis=1)]
-    return df
+    return df, min_unix
 
 def classification(X_train, y_train, X_test, classyType, cross_val = False):
     if classyType == 'NB':
@@ -71,7 +74,7 @@ def classification(X_train, y_train, X_test, classyType, cross_val = False):
 
 
 def pca(X_train, X_test):
-    pca_model = PCA(n_components=0.99, svd_solver='full')
+    pca_model = PCA(n_components=5)# svd_solver='full')
     X_train = pca_model.fit_transform(X_train)
     X_test = pca_model.transform(X_test)
     print('PCA k={}'.format(np.shape(X_train)[1]))
@@ -107,7 +110,7 @@ def plot_ROC(y_test, smoted_predict_prob, unsmoted_predict_prob, smoted_predict_
     plt.xlabel('False Positive Rate')
     plt.show()
 
-def cross_validation(clsType, X, y):
+def cross_validation(clsType, X, y, df):
     k_fold = StratifiedKFold(10)
     final_conf_matrix = np.zeros((2, 2))
     if clsType == 'RF':
@@ -115,12 +118,16 @@ def cross_validation(clsType, X, y):
         model = RandomForestClassifier(class_weight='balanced')
     elif clsType == 'SVM':
         print('SVM')
-        model = svm.SVC(class_weight='balanced')
+        model = svm.LinearSVC(class_weight='balanced')
     for k, (train, test) in enumerate(k_fold.split(X, y)):
         print('Iteration {}'.format(k))
-        sm = SMOTETomek(kind_smote='svm')  # SMOTE()#
+        sm = SMOTETomek()  # SMOTE()# kind_smote='svm'
         X_train, y_train = sm.fit_sample(X[train], y[train])
+        X_train = calc_time_diff(X_train, df)
+
         X_test = X[test]; y_test = y[test]
+        X_test = calc_time_diff(X_test, df)
+
         # if 'creationdate_unix' in
         print('Train data size: {}'.format(np.shape(X_train)))
         print('Test data size: {}'.format(np.shape(X_test)))
@@ -135,25 +142,44 @@ def cross_validation(clsType, X, y):
         print('Score: {} Confusion matrix: \n {}'.format(score, conf_matrix))
     print('Final confusion matrix: \n {}'.format(final_conf_matrix))
 
+def calc_time_diff(X, df):
+    df_X = pd.DataFrame(X, columns=df.columns.values)
+    df_X['creationdate_unix'] = df_X['creationdate_unix'].map(lambda x: round(math.exp(x)))
+    df_X['creationdate'] = pd.to_datetime(df_X['creationdate_unix'], unit='s')
+    df_X = plotting.time_diff(df_X)
+    df_X = df_X.drop(['creationdate'], axis=1)
+    X = df_X.values
+    return X
+
+def time_diff(df):
+    df['date'] = pd.to_datetime(df['creationdate'])
+    df['diff_time'] = df.sort_values(['card_id', 'creationdate']).groupby('card_id')['date'].diff()
+    # print(df.sort_values(['card_id', 'date']).head(20))
+    time = pd.DatetimeIndex(df['diff_time'])
+    df['diff_time_min'] = time.hour * 60 + time.minute + 1  # df['diff_time'].str.split(':').apply(lambda x: int(x[0]) * 60 + int(x[1]))
+    df['diff_time_min'] = df['diff_time_min'].fillna(0)
+    df = df.drop(['date', 'diff_time'], axis=1)
+    return df
 
 def compute(df, clsType, crossVal):
     # df['creationdate'] = pd.to_datetime(df['creationdate'], unit='s')
 
     y = df['simple_journal'].values
-    print(y)
+    # print(y)
     y = label_binarize(y, classes=['Settled', 'Chargeback'])
     y = np.concatenate(y, 0)
 
-    df = df.drop(['simple_journal', 'creationdate', 'bookingdate'], axis=1)#, 'card_id' 'mail_id', 'ip_id'
+    df = df.drop(['simple_journal', 'creationdate', 'bookingdate', 'amount'], axis=1)#, 'card_id' 'mail_id', 'ip_id'
 
     df = pd.get_dummies(df, columns=['issuercountrycode', 'txvariantcode', 'currencycode', 'shoppercountrycode',
                                      'shopperinteraction', 'accountcode', 'cardverificationcodesupplied'])
+    # print(df.columns.values)
 
     print('Amount of fraud data: {} and non fraud: {}'.format((y == 1).sum(), (y == 0).sum()))
     X = df.values
 
     if crossVal:
-        cross_validation(clsType, X, y)
+        cross_validation(clsType, X, y, df)
     else:
         # length = np.shape(X)[0]#, np.shape(y))
         # train_len = round(length*ratio)
@@ -209,15 +235,15 @@ def parse_arguments():
     return args
 
 
-def run(cls,unix, diff):
+def run(cls, unix, diff):
     df = pd.read_csv('data_for_student_case.csv', index_col=0)  # dataframe
-    df = preprocessing(df, unix, diff)
+    df, min_unix = preprocessing(df, unix, diff)
     compute(df, cls, True)
 
 def main():
 
     df = pd.read_csv('data_for_student_case.csv', index_col=0)  # dataframe
-    df = preprocessing(df)
+    # df = preprocessing(df)
 
     args = parse_arguments()
 
@@ -233,7 +259,16 @@ def main():
     # plotting.plot_cards_per_ip(df)
 
     if args.cls is not None:
-        compute(df, args.cls, True)
+        print('1')
+        run(args.cls, True, False)
+        # print('2')
+        # run(args.cls, False, True)
+        # print('3')
+        # run(args.cls, False, False)
+        # print('4')
+        # run(args.cls, True, True)
+
+        # compute(df, args.cls, True)
 
 
 
