@@ -1,3 +1,5 @@
+import math
+
 import matplotlib.pyplot as plt
 import argparse
 import pandas as pd
@@ -5,6 +7,7 @@ import numpy as np
 
 from sklearn.metrics import confusion_matrix
 from imblearn.over_sampling import SMOTE
+from imblearn.combine import SMOTETomek
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
@@ -15,30 +18,36 @@ from sklearn.preprocessing import label_binarize
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.decomposition import PCA
-from imblearn.combine import SMOTETomek
+from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn import svm
 
 import plotting as plotting
 
 import argparse
 
-
 #format: txid,bookingdate,issuercountrycode,txvariantcode,bin,amount,currencycode,shoppercountrycode,shopperinteraction,simple_journal,cardverificationcodesupplied,cvcresponsecode,creationdate,accountcode,mail_id,ip_id,card_id
 
-def preprocessing(df):
+def preprocessing(df, unix, diff):
     df.drop(df[df['simple_journal'] == 'Refused'].index, inplace=True)
     # df = df[df['shoppercountrycode'] != 'GB']
     df['cvcresponsecode'] = df['cvcresponsecode'].map(lambda x: float(x))
+    df.loc[df['cvcresponsecode'] >= 3.0, 'cvcresponsecode'] = 3.0
     df['amount'] = df['amount'].map(lambda x: float(x))
     df['card_id'] = df['card_id'].map(lambda x: x[4:])
     df['ip_id'] = df['ip_id'].map(lambda x: x[2:])
     df['mail_id'] = df['mail_id'].map(lambda x: x[5:])
-    # df['creationdate_unix'] = pd.DatetimeIndex(df['creationdate']).astype(np.int64) / 1000000000 #very bad results!!
+    if unix:
+        df['creationdate_unix'] = pd.DatetimeIndex(df['creationdate']).astype(np.int64) / 1000000000 #very bad results!!
+        df['creationdate_unix'].sub(df['creationdate_unix'].min(), axis=0)
+        df['creationdate_unix'] = df['creationdate_unix'].map(lambda x: math.log(x))
+    if diff:
+        df = plotting.time_diff(df)
     # df['AUD_currency'] = df[['currencycode', 'amount']].apply(lambda x: currencyconverter.convert_currency_from_aud(x), axis=1)
     df.dropna(axis=0, how='any', inplace=True)
-    df = df[~df.isin(['NaN', 'NaT']).any(axis=1)]
+    df = df[~df.isin(['NaN', 'NaT', 'NA']).any(axis=1)]
     return df
 
-def classification(X_train, y_train, X_test, classyType):
+def classification(X_train, y_train, X_test, classyType, cross_val = False):
     if classyType == 'NB':
         print('Naive Bayes')
         model = GaussianNB() # -- good
@@ -54,6 +63,7 @@ def classification(X_train, y_train, X_test, classyType):
     elif classyType == 'LR':
         print('Linear Regression')
         model = LogisticRegression() # -- bad
+
     model.fit(X_train, y_train)
     predict_prob = model.predict_proba(X_test)[:, 1]
     predict_bin = model.predict(X_test)
@@ -97,42 +107,75 @@ def plot_ROC(y_test, smoted_predict_prob, unsmoted_predict_prob, smoted_predict_
     plt.xlabel('False Positive Rate')
     plt.show()
 
-def smote(df, ratio, clsType,  toPlot=False):
-    # print(df.isnull().any())
+def cross_validation(clsType, X, y):
+    k_fold = StratifiedKFold(10)
+    final_conf_matrix = np.zeros((2, 2))
+    if clsType == 'RF':
+        print('Random Forest')
+        model = RandomForestClassifier(class_weight='balanced')
+    elif clsType == 'SVM':
+        print('SVM')
+        model = svm.SVC(class_weight='balanced')
+    for k, (train, test) in enumerate(k_fold.split(X, y)):
+        print('Iteration {}'.format(k))
+        sm = SMOTETomek(kind_smote='svm')  # SMOTE()#
+        X_train, y_train = sm.fit_sample(X[train], y[train])
+        X_test = X[test]; y_test = y[test]
+        # if 'creationdate_unix' in
+        print('Train data size: {}'.format(np.shape(X_train)))
+        print('Test data size: {}'.format(np.shape(X_test)))
+        print('Test data fraud #{}'.format((y_test == 1).sum()))
+        X_train, X_test = pca(X_train, X_test)
+        model.fit(X_train, y_train)
+        score = model.score(X_test, y_test)
+        y_pred = model.predict(X_test)
+        conf_matrix = confusion_matrix(y_test, y_pred)
+        for i in range(len(conf_matrix)):
+            final_conf_matrix[i] = [sum(x) for x in zip(final_conf_matrix[i], conf_matrix[i])]
+        print('Score: {} Confusion matrix: \n {}'.format(score, conf_matrix))
+    print('Final confusion matrix: \n {}'.format(final_conf_matrix))
 
+
+def compute(df, clsType, crossVal):
     # df['creationdate'] = pd.to_datetime(df['creationdate'], unit='s')
-    df = pd.get_dummies(df, columns=['issuercountrycode', 'txvariantcode', 'currencycode', 'shoppercountrycode',
-                                     'shopperinteraction', 'accountcode', 'cardverificationcodesupplied'])
 
     y = df['simple_journal'].values
     print(y)
     y = label_binarize(y, classes=['Settled', 'Chargeback'])
     y = np.concatenate(y, 0)
-    # print(y)
-    df = df.drop(['simple_journal', 'creationdate', 'bookingdate', 'mail_id', 'ip_id', 'card_id'], axis=1)
+
+    df = df.drop(['simple_journal', 'creationdate', 'bookingdate'], axis=1)#, 'card_id' 'mail_id', 'ip_id'
+
+    df = pd.get_dummies(df, columns=['issuercountrycode', 'txvariantcode', 'currencycode', 'shoppercountrycode',
+                                     'shopperinteraction', 'accountcode', 'cardverificationcodesupplied'])
+
     print('Amount of fraud data: {} and non fraud: {}'.format((y == 1).sum(), (y == 0).sum()))
     X = df.values
 
-    # length = np.shape(X)[0]#, np.shape(y))
-    # train_len = round(length*ratio)
-    # X_train = X[:train_len, :]
-    # y_train = y[:train_len]
-    # X_test = X[train_len:, :]
-    # y_test = y[train_len:]
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
-    print('Test data size: ' + str(np.shape(X_test)))
-    print('Test data fraud #{}'.format((y_test == 1).sum()))
+    if crossVal:
+        cross_validation(clsType, X, y)
+    else:
+        # length = np.shape(X)[0]#, np.shape(y))
+        # train_len = round(length*ratio)
+        # X_train = X[:train_len, :]
+        # y_train = y[:train_len]
+        # X_test = X[train_len:, :]
+        #     # y_test = y[train_len:]
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        print('Test data size: ' + str(np.shape(X_test)))
+        print('Test data fraud #{}'.format((y_test == 1).sum()))
+        # SMOTE Data
+        sm = SMOTETomek()  # SMOTE()#
+        X_resampled, y_resampled = sm.fit_sample(X_train, y_train)
 
-    # SMOTE Data
-    sm = SMOTETomek()#SMOTE()#
-    X_resampled, y_resampled = sm.fit_sample(X_train, y_train)
+        print('Train data size: {}'.format(np.shape(X_resampled)))
 
-    print('Train data size: {}'.format(np.shape(X_resampled)))
-
-    if toPlot:
         if clsType == 'RF':
             X_resampled, X_test_sm = pca(X_resampled, X_test)
             X_train, X_test_unsm = pca(X_train, X_test)
+        else:
+            X_test_sm = X_test
+            X_test_unsm = X_test
         smoted_model, smoted_predict_prob, smoted_predict_bin = classification(X_resampled, y_resampled, X_test_sm, clsType)
         unsmoted_model, unsmoted_predict, unsmoted_predict_bin = classification(X_train, y_train, X_test_unsm, clsType)
 
@@ -141,7 +184,7 @@ def smote(df, ratio, clsType,  toPlot=False):
 
         plot_ROC(y_test, smoted_predict_prob, unsmoted_predict, smoted_predict_bin, unsmoted_predict_bin)
 
-    return X_resampled, y_resampled, X_test, y_test
+    # return X_resampled, y_resampled, X_test, y_test
 
     # df2 = pd.DataFrame(X_resampled,columns=df.columns.values)
     # df3 = pd.DataFrame(y_resampled,columns=['simple_journal'])
@@ -166,6 +209,11 @@ def parse_arguments():
     return args
 
 
+def run(cls,unix, diff):
+    df = pd.read_csv('data_for_student_case.csv', index_col=0)  # dataframe
+    df = preprocessing(df, unix, diff)
+    compute(df, cls, True)
+
 def main():
 
     df = pd.read_csv('data_for_student_case.csv', index_col=0)  # dataframe
@@ -185,7 +233,7 @@ def main():
     # plotting.plot_cards_per_ip(df)
 
     if args.cls is not None:
-        smote(df, 2/3, args.cls, toPlot=True)
+        compute(df, args.cls, True)
 
 
 

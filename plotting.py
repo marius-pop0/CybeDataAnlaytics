@@ -18,10 +18,11 @@ def statistics(df):
 def time_diff(df):
     df['date'] = pd.to_datetime(df['creationdate'])
     df['diff_time'] = df.sort_values(['card_id', 'creationdate']).groupby('card_id')['date'].diff()
-    print(df.sort_values(['card_id', 'date']).head(20))
+    # print(df.sort_values(['card_id', 'date']).head(20))
     time = pd.DatetimeIndex(df['diff_time'])
     df['diff_time_min'] = time.hour * 60 + time.minute + 1  # df['diff_time'].str.split(':').apply(lambda x: int(x[0]) * 60 + int(x[1]))
     df['diff_time_min'] = df['diff_time_min'].fillna(0)
+    df = df.drop(['date', 'diff_time'], axis=1)
     return df
 
 def plot_time_diff(df):
