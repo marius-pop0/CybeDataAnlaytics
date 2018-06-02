@@ -1,9 +1,13 @@
 #!/usr/bin/env python
 
 import os
+import sys
+sys.path.insert(0, 'nltk_model/nltk/model')
 import numpy as np
 import math
-
+import pandas as pd
+# from ngram import MLENgramModel
+from nltk_model import NgramModel
 
 class SAX(object):
     """
@@ -148,12 +152,12 @@ class SAX(object):
 #        if not numSubsequences:
 #            numSubsequences = 20
         self.windowSize = cover
-        print (self.windowSize)
+        # print (self.windowSize)
         #if not overlappingFraction:
         #    overlappingFraction = 0.9
         #overlap = self.windowSize*overlappingFraction
         moveSize = int(stride)
-        print ('move'+str(moveSize))
+        # print ('move'+str(moveSize))
         if moveSize < 1:
             raise OverlapSpecifiedIsNotSmallerThanWindowSize()
         ptr = 0
@@ -162,11 +166,11 @@ class SAX(object):
         stringRep = []
         while ptr < n-self.windowSize+1:
             thisSubRange = x[ptr:ptr+self.windowSize]
-            (thisStringRep,indices) = self.to_letter_rep(thisSubRange)
+            (thisStringRep, indices) = self.to_letter_rep(thisSubRange)
             stringRep.append(thisStringRep)
             windowIndices.append((ptr, ptr+self.windowSize))
             ptr += moveSize
-        return (stringRep,windowIndices)
+        return stringRep, windowIndices
 
     def batch_compare(self, xStrings, refString):
         return [self.compare_strings(x, refString) for x in xStrings]
@@ -176,3 +180,5 @@ class SAX(object):
 
     def set_window_size(self, windowSize):
         self.windowSize = windowSize
+
+
