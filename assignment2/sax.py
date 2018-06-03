@@ -5,9 +5,7 @@ import sys
 sys.path.insert(0, 'nltk_model/nltk/model')
 import numpy as np
 import math
-import pandas as pd
-# from ngram import MLENgramModel
-from nltk_model import NgramModel
+
 
 class SAX(object):
     """
