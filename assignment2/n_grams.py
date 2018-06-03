@@ -49,7 +49,7 @@ def main():
     train2_df = pd.read_csv('BATADAL_dataset04.csv', index_col=0)
     # test_df = pd.read_csv('BATADAL_test_dataset.csv', index_col=0)
     train1_df.index = pd.to_datetime(train1_df.index, dayfirst=True)
-    for col in train1_df:
+    for col in ['L_T1', 'L_T4', 'L_T7', 'S_PU10', 'S_PU11', 'F_PU10', 'F_PU11', 'S_PU2', 'S_PU6', 'F_PU2', 'F_PU6', 'F_PU7']:
         for window_size in [10]:
             for word_size in [3]:
                 alphabet_size = 3
@@ -79,11 +79,12 @@ def main():
                     # print(np.shape(train2_df.values))
                     plt.clf()
                     train2_df['ATT_FLAG_anom'] = np.where(train2_df['ATT_FLAG'] == 1, 1.5, 0)
-                    ax = train2_df['ATT_FLAG_anom'].plot(grid=True, label=True, color='r')
+                    ax = train2_df['ATT_FLAG_anom'].plot(grid=True, color='r', label='Anomaly')
                     train2_df['n_gram'] = probabilities
 
-                    ax2 = train2_df['n_gram'].plot(grid=True, label=True)
+                    ax2 = train2_df['n_gram'].plot(grid=True, label='Validation')
 
+                    plt.legend()
                     plt.title('window: {} threshold: {}, col:{}'.format(window_size, threshold, col))
                     plt.savefig('images/fig_{}_{}_{}.png'.format(window_size, threshold, col))
                     # plt.show()
