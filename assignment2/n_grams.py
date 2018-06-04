@@ -1,5 +1,4 @@
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
 import utils
 from sax import SAX
@@ -41,18 +40,15 @@ def n_gram_predict(model, n_grams, window, threshold, window_size):
             probalilites.append(0)
     for i in range(window_size-1):
         probalilites.append(0)
-    print(true_prob)
     return anomalies, probalilites
 
 
 def main():
     train1_df = pd.read_csv('BATADAL_dataset03.csv', index_col='DATETIME')
     train2_df = pd.read_csv('BATADAL_dataset04.csv', index_col=0)
-    # test_df = pd.read_csv('BATADAL_test_dataset.csv', index_col=0)
     train1_df.index = pd.to_datetime(train1_df.index, dayfirst=True)
-    labels = []
     train2_df['n_gram'] = np.zeros(len(train2_df))
-    for col in ['L_T1',  'F_PU11',  'S_PU6']: #'L_T4', 'L_T7', 'S_PU10', 'S_PU11', 'F_PU10', 'F_PU2', 'F_PU6', 'F_PU7 'S_PU2',
+    for col in ['L_T1',  'F_PU11',  'S_PU6']:
         window_size = 10
         word_size = 3
         alphabet_size = 3
@@ -67,47 +63,18 @@ def main():
 
         threshold = 1e-6
 
-        # print(train_string_rep)
-        # print(train_window_indices)
-
-        # print(np.shape(train_string_rep2))
-
         model = n_gram_model(train_string_rep)
         anomalies, probabilities = n_gram_predict(model, train_string_rep2, train_window_indices2, threshold, window_size)
         print('window: {}, word: {}, alphabet: {}, threshold: {}'.format(window_size, word_size, alphabet_size, threshold))
 
-        # print(anomalies)
-
-        # print(np.shape(probabilities))
-        # print(np.shape(train2_df.values))
-        plt.clf()
         train2_df['ATT_FLAG_anom'] = np.where(train2_df['ATT_FLAG'] == 1, 100, 0)
-        # ax = train2_df['ATT_FLAG_anom'].plot(grid=True, color='r', label='Anomaly')
-        # labels += probabilities
         train2_df['n_gram'] += probabilities
-
-
-
-        # ax2 = train2_df['n_gram'].plot(grid=True, label='Validation')
-        #
-        # plt.legend()
-        # plt.title('window: {} threshold: {}, col:{}'.format(window_size, threshold, col))
-        # plt.savefig('images/fig_{}_{}_{}.png'.format(window_size, threshold, col))
-        # plt.show()
-#
-    # plt.plot(probabilities, '.')
-    # plt.show()
-
-
-    # model = NgramModel(3, train_string_rep)
-    # perplexity = model.perplexity(train_string_rep2)
 
     train2_df['n_gram'] =  np.where(train2_df['n_gram'] > 0, 1, 0)
 
     train2_df['diff'] = train2_df['ATT_FLAG_anom'] - train2_df['n_gram']
 
     arr = train2_df['diff'].value_counts()
-    print(arr)
 
     TTD = utils.TDD_metric(train2_df, probabilities)
     TP = arr[99]

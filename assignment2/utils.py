@@ -1,6 +1,5 @@
 import pandas as pd
 
-
 def TDD_metric(train2_df, y_pred):
     counter = 0
     found_c = 0
